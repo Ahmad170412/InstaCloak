@@ -105,6 +105,86 @@ def _bio_links(node: dict) -> list:
     return out
 
 
+_DOM_COUNT_RE = re.compile(r"([\d.,]+)\s*(k|m|b)?\s*(posts?|followers?|following)", re.I)
+_SUFFIX_MUL = {"k": 1_000, "m": 1_000_000, "b": 1_000_000_000}
+
+
+def _dom_num(token: str, suffix: str | None) -> int:
+    n = float(token.replace(",", ""))
+    mul = _SUFFIX_MUL.get((suffix or "").lower())
+    return int(n * mul) if mul else int(n)
+
+
+def profile_from_dom_text(text: str, verified: bool, username: str) -> dict:
+    """Best-effort profile from the visible page text (pure).
+
+    Used when the profile API is throttled (HTTP 429) and the logged-in HTML
+    carries no embedded JSON. Only fields the page demonstrably displays are
+    filled -- counts, private flag, verified badge, and the full name when the
+    page follows the 'username | Name | counts' shape. Everything else stays
+    None so no data is ever fabricated.
+    """
+    text = str(text)
+    flat = " ".join(text.split())
+    low = flat.lower()
+    counts: dict = {"posts": None, "followers": None, "following": None}
+    for m in _DOM_COUNT_RE.finditer(flat):
+        label = m.group(3).lower()
+        if label.startswith("post"):
+            key = "posts"
+        elif label.startswith("follower"):
+            key = "followers"
+        elif label.startswith("follow"):
+            key = "following"
+        else:
+            continue
+        counts[key] = _dom_num(m.group(1), m.group(2))
+
+    full_name = None
+    # page text is newline-shaped: '<username>', '<Full Name>', '<3 posts>', ...
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    for i, ln in enumerate(lines):
+        if ln.rstrip(".").lower().lstrip("@") == username.lower():
+            for cand in lines[i + 1:i + 3]:
+                if (cand and len(cand) <= 80 and not _DOM_COUNT_RE.search(cand)
+                        and cand.lower() != "instagram" and not cand.startswith("@")):
+                    full_name = cand
+            break
+    if full_name is None:  # single-line / pipe-separated fallback
+        m = re.search(rf"(?:^|\| ){re.escape(username)} \| ([^|]{{1,80}})", flat, re.I)
+        if m:
+            cand = m.group(1).strip()
+            if cand and not _DOM_COUNT_RE.match(cand):
+                full_name = cand
+
+    return {
+        "username": username,
+        "full_name": full_name,
+        "biography": None,
+        "id": None,
+        "is_private": "this profile is private" in low,
+        "is_verified": bool(verified),
+        "counts": counts,
+        "recent_posts": [],
+    }
+
+
+def profile_from_dom(page, username: str) -> dict | None:
+    """Scrape profile basics from the rendered page (API-throttle fallback)."""
+    try:
+        data = page.evaluate("""() => ({
+            text: document.body ? document.body.innerText : '',
+            verified: document.querySelectorAll('[aria-label="Verified"]').length,
+        })""")
+    except Exception:  # noqa: BLE001
+        return None
+    prof = profile_from_dom_text(data.get("text") or "",
+                                 bool(data.get("verified")), username)
+    if any(v is not None for v in prof["counts"].values()):
+        return prof
+    return None
+
+
 def _badge_names(node: dict) -> list:
     """Account badges (e.g. 'new' on freshly-created accounts)."""
     out = []

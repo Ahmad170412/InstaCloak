@@ -53,6 +53,21 @@ Cautions:
   - Public data, but scraping technically violates Instagram's ToS. Your call.
 """
 
+NOTES_LOGGED_IN = """\
+Will collect (public data, using the logged-in burner session):
+  - everything logged-out collects, PLUS:
+  - follower/following username lists (best-effort; private targets stay
+    hidden unless the burner follows them first)
+  - stories in the 24h window (when the target has active ones)
+
+Cautions:
+  - The session makes you a real, logged-in account to Instagram -- keep
+    volume low, and this is why you use a dedicated burner, never your
+    primary account.
+  - Private accounts still expose almost nothing unless you follow them.
+  - Public data, but scraping technically violates Instagram's ToS. Your call.
+"""
+
 # C0 control chars + DEL (keep \n and \t). Strips ESC sequences, bells, etc.
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 

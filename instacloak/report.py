@@ -265,13 +265,22 @@ def _posts_md(report: dict) -> list[str]:
     return lines
 
 
+def _wall_label(report: dict, g: dict) -> str:
+    """Suffix explaining an empty list: private account vs login wall."""
+    if not g.get("walled"):
+        return ""
+    if (report.get("profile") or {}).get("is_private"):
+        return " (private account)"
+    return " (login-walled)"
+
+
 def _social_md(report: dict) -> list[str]:
     lines = ["## Social graph", ""]
     for label, key in (("Followers", "followers"), ("Following", "following")):
         g = report.get(key) or {}
         n = g.get("count")
         lines.append(f"- **{label}:** count={n}, collected={g.get('collected')}"
-                     + (" (login-walled)" if g.get("walled") else ""))
+                     + _wall_label(report, g))
         for u in (g.get("usernames") or [])[:50]:
             lines.append(f"  - @{_md_clean(u)}")
     return lines + [""]
@@ -378,10 +387,10 @@ def print_summary(report: dict) -> None:
     say(f"  phones      : {report['contacts']['phones'] or 'none'}")
     f = report["followers"]
     say(f"  followers   : count={f['count']}, collected={f['collected']}"
-        + (" (login-walled)" if f["walled"] else ""))
+        + _wall_label(report, f))
     g = report["following"]
     say(f"  following   : count={g['count']}, collected={g['collected']}"
-        + (" (login-walled)" if g["walled"] else ""))
+        + _wall_label(report, g))
     say(f"  media saved : {len(report['media_downloaded'])} files")
     stories = report.get("stories") or {}
     if stories and stories.get("count"):

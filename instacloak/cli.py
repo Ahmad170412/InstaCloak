@@ -17,7 +17,7 @@ from .config import load_config, save_login_config
 from .engine import collect, output_dir
 from .report import print_summary, write_markdown
 from .session import open_session
-from .ui import NOTES, c, say, say_banner, say_parts
+from .ui import NOTES, NOTES_LOGGED_IN, c, say, say_banner, say_parts
 
 MENU_ITEMS = [("1", "OSINT"), ("2", "Login (burner)"),
               ("3", "Footprint"), ("4", "Exit")]
@@ -130,7 +130,9 @@ def run_osint(cfg: dict, args) -> None:
             return
 
     say(f"\n  Target: @{username}\n", "bold")
-    say(NOTES)
+    will_login = bool(effective_cfg.get("login_enabled")
+                      and login_creds_configured(effective_cfg))
+    say(NOTES_LOGGED_IN if will_login else NOTES)
 
     # 3) final confirmation
     if not args.yes:

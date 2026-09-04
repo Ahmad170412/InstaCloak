@@ -18,12 +18,28 @@ from .auth import ensure_login
 from .fetch import download_media
 from .human import dismiss_login_popup, human_delay, warmup_scrolls
 from .post import shortcodes_from_dom, visit_post
-from .profile import _hd_propic_url, get_profile, norm_profile, profile_from_embedded
+from .profile import (_hd_propic_url, get_profile, norm_profile,
+                      profile_from_dom, profile_from_embedded)
 from .report import build_report, write_report
 from .session import open_session, safe_dir_name
 from .social import attempt_relationship_list
 from .stories import collect_stories
 from .ui import c, say, say_parts, section
+
+
+def _list_wall_note(kind: str, profile: dict | None, logged_in: bool) -> tuple[str, str]:
+    """Why a list came back walled -- label + note copy for the report."""
+    if profile and profile.get("is_private"):
+        label = "private account"
+        why = (f"{kind} list not visible: private account "
+               "(viewable only after the burner follows them)")
+    elif not logged_in:
+        label = "login-walled"
+        why = f"{kind} list login-walled (unlocks via burner login)"
+    else:
+        label = "walled"
+        why = f"{kind} list unavailable (session could not unlock it)"
+    return label, why
 
 
 def output_dir(cfg: dict, username: str) -> Path:
@@ -69,6 +85,11 @@ def collect(cfg: dict, username: str) -> dict:
             if profile_raw:
                 reason = "embedded_page_json"
         if profile_raw is None:
+            profile_raw = profile_from_dom(page, username)
+            if profile_raw:
+                reason = "dom_page"
+                notes.append("profile API throttled; basics scraped from the visible page")
+        if profile_raw is None:
             reason = reason or "not_found"
             say(f"  profile unavailable ({reason}). "
                 "Private account, or Instagram is login-walling this IP.", "yellow")
@@ -81,7 +102,7 @@ def collect(cfg: dict, username: str) -> dict:
             say_parts("  saved: ", (str(report_path), "green"))
             return report
 
-        profile = norm_profile(profile_raw)
+        profile = profile_raw if reason == "dom_page" else norm_profile(profile_raw)
         if profile.get("is_private"):
             say("  target is private — public data is limited to the basics.", "yellow")
             notes.append("private account: posts, followers list, and media are not available")
@@ -143,14 +164,16 @@ def collect(cfg: dict, username: str) -> dict:
         if cfg["attempt_followers"]:
             section(4, 5, "checking social graph (followers / following)")
             f_list, f_walled = attempt_relationship_list(page, cfg, username, "followers")
-            if f_walled:
-                notes.append("followers list login-walled (unlocks in V2 burner-account mode)")
-            say(f"  followers: collected {len(f_list)}" + (" [login-walled]" if f_walled else ""))
-            human_delay(cfg, 1.5, 3.0)
             g_list, g_walled = attempt_relationship_list(page, cfg, username, "following")
-            if g_walled:
-                notes.append("following list login-walled (unlocks in V2 burner-account mode)")
-            say(f"  following: collected {len(g_list)}" + (" [login-walled]" if g_walled else ""))
+            for kind, lst, walled in (("followers", f_list, f_walled),
+                                      ("following", g_list, g_walled)):
+                if walled:
+                    label, why = _list_wall_note(kind, profile, logged_in)
+                    notes.append(why)
+                    say(f"  {kind}: collected {len(lst)} [{label}]")
+                else:
+                    say(f"  {kind}: collected {len(lst)}")
+                human_delay(cfg, 1.5, 3.0)
         else:
             f_list, g_list, f_walled, g_walled = [], [], True, True
 

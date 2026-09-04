@@ -340,6 +340,31 @@ def test_list_wall_verification():
     assert not social._list_looks_real({})
 
 
+def test_dom_profile_fallback():
+    """Page-text scraping rescues counts/name when the API is throttled."""
+    private_text = ("teamleaderistrue\nThe Team Leader\n3 posts\n61 followers\n"
+                    "801 following\nFollow\nThis profile is private\n"
+                    "Follow to see their photos and videos.\nSuggested for you")
+    prof = profile.profile_from_dom_text(private_text, False, "teamleaderistrue")
+    assert prof["counts"] == {"posts": 3, "followers": 61, "following": 801}
+    assert prof["is_private"] is True
+    assert prof["full_name"] == "The Team Leader"
+    assert prof["id"] is None and prof["biography"] is None
+
+    public_text = ("natgeo\nNational Geographic\n268.6M followers\n194 "
+                   "following\n12 posts\nStep into wonder")
+    prof = profile.profile_from_dom_text(public_text, True, "natgeo")
+    assert prof["counts"]["followers"] == 268_600_000
+    assert prof["counts"]["following"] == 194
+    assert prof["counts"]["posts"] == 12
+    assert prof["is_private"] is False and prof["is_verified"] is True
+    assert prof["full_name"] == "National Geographic"
+
+    # nothing recognizable -> no profile (never fabricate)
+    assert profile.profile_from_dom_text("just some text", False, "x")["counts"] \
+        == {"posts": None, "followers": None, "following": None}
+
+
 def test_stripped_node_business_unknown():
     """A logged-out node stripped of professional fields must say unknown,
     never a fabricated False."""
