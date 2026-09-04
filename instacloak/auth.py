@@ -16,6 +16,19 @@ from .ui import say
 
 LOGIN_URL = "https://www.instagram.com/accounts/login/"
 HOME_URL = "https://www.instagram.com/"
+
+# Instagram rotates its login DOM; try these in order of specificity.
+USERNAME_SELECTORS = (
+    'input[name="username"]',
+    'input[aria-label*="username" i]',
+    'input[aria-label*="phone" i]',
+    'input[placeholder*="username" i]',
+    'input[placeholder*="phone" i]',
+    'input[placeholder*="email" i]',
+    'input[type="text"]',
+)
+PASSWORD_SELECTORS = ('input[name="password"]', 'input[type="password"]')
+
 CHALLENGE_RE = re.compile(
     r"(?i)(confirmation code|enter the code|challenge required|we need to make sure "
     r"it's you|suspicious activity|we\'ve sent a code|add another device|verify it's you)")
@@ -65,6 +78,59 @@ def _click_not_now(page) -> None:
         pass
 
 
+def _wait_first(page, selectors: tuple, timeout: int) -> str | None:
+    """Wait up to *timeout* for the first visible field matching any selector."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        for sel in selectors:
+            try:
+                if page.is_visible(sel, timeout=500):
+                    return sel
+            except Exception:  # noqa: BLE001 - not present / detached
+                pass
+        page.wait_for_timeout(600)
+    return None
+
+
+def _login_page_snapshot(page) -> dict:
+    """Describe what the login page is actually showing (for diagnostics)."""
+    try:
+        return page.evaluate("""() => {
+            const vis = (el) => !!el && el.offsetParent !== null;
+            const inputs = [...document.querySelectorAll('input')].filter(vis)
+                .slice(0, 6).map(i => ({name: i.name || '', type: i.type || '',
+                    aria: i.getAttribute('aria-label') || '',
+                    ph: i.placeholder || ''}));
+            const ctas = [...document.querySelectorAll('button, a')].filter(vis)
+                .map(e => (e.innerText || '').trim())
+                .filter(t => t && t.length < 40).slice(0, 8);
+            const body = (document.body ? document.body.innerText : '')
+                .replace(/\n+/g, ' | ').slice(0, 350);
+            return {url: location.href, title: document.title, inputs, ctas, body};
+        }""")
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _print_snapshot(snap: dict) -> None:
+    """Print a compact, sanitized picture of the login page."""
+    say(f"  page URL : {snap.get('url') or '?'}", "yellow")
+    say(f"  title    : {(snap.get('title') or '?')[:90]}", "yellow")
+    inputs = snap.get("inputs") or []
+    if inputs:
+        for i in inputs:
+            say(f"  input    : name={i.get('name') or '-'} type={i.get('type') or '-'} "
+                f"aria={i.get('aria') or '-'} placeholder={i.get('ph') or '-'}", "yellow")
+    else:
+        say("  input    : (none visible)", "yellow")
+    ctas = snap.get("ctas") or []
+    if ctas:
+        say(f"  buttons  : {', '.join(str(c) for c in ctas[:6])}", "yellow")
+    body = snap.get("body") or ""
+    if body:
+        say(f"  page text: {body[:220]}", "yellow")
+
+
 def ensure_login(page, cfg: dict, username: str) -> bool:
     """Make sure the burner session is logged in. Returns True if logged in."""
     user, pw = cfg.get("login_username", ""), cfg.get("login_password", "")
@@ -88,19 +154,41 @@ def ensure_login(page, cfg: dict, username: str) -> bool:
         human_delay(cfg, 1.5, 3.0)
     except Exception:  # noqa: BLE001
         pass
-    try:
+
+    user_sel = _wait_first(page, USERNAME_SELECTORS, 15000)
+    if not user_sel:
+        # page may bounce/redirect on first load -- retry once, then report
         try:
-            page.wait_for_selector('input[name="username"]', timeout=15000)
-        except Exception:  # noqa: BLE001 - page may bounce/redirect; retry once
             page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_selector('input[name="username"]', timeout=20000)
-        page.type('input[name="username"]', user, delay=random.uniform(35, 80))
+            page.wait_for_timeout(2500)
+        except Exception:  # noqa: BLE001
+            pass
+        user_sel = _wait_first(page, USERNAME_SELECTORS, 20000)
+    if not user_sel:
+        say("  couldn't find the username field on the login page.", "yellow")
+        _print_snapshot(_login_page_snapshot(page))
+        return False
+
+    pw_sel = _wait_first(page, PASSWORD_SELECTORS, 8000)
+    if not pw_sel:
+        say("  found the username field but no password field.", "yellow")
+        _print_snapshot(_login_page_snapshot(page))
+        return False
+
+    try:
+        page.type(user_sel, user, delay=random.uniform(35, 80))
         human_delay(cfg, 0.4, 0.9)
-        page.type('input[name="password"]', pw, delay=random.uniform(35, 80))
+        page.type(pw_sel, pw, delay=random.uniform(35, 80))
         human_delay(cfg, 0.4, 0.9)
-        page.click('button[type="submit"]')
+        # submit: prefer the submit button, fall back to Enter (robust across
+        # layout rotations, incl. the two-step 'password only' variant)
+        try:
+            page.click('button[type="submit"]', timeout=3000)
+        except Exception:  # noqa: BLE001
+            page.keyboard.press("Enter")
     except Exception as exc:  # noqa: BLE001
         say(f"  login form interaction failed: {exc}", "yellow")
+        _print_snapshot(_login_page_snapshot(page))
         return False
 
     # 3) wait for completion (feed, challenge, or failure)

@@ -456,6 +456,90 @@ def test_report_assembly():
     assert rep["contacts"]["emails"][0] == "biz@legacy.io"
 
 
+def test_login_mode_parsing():
+    """Run-mode answers map correctly; empty defaults to logged out."""
+    from instacloak import cli
+    assert cli.parse_run_mode("2") is True
+    assert cli.parse_run_mode("burner") is True
+    assert cli.parse_run_mode("logged in") is True
+    assert cli.parse_run_mode("1") is False
+    assert cli.parse_run_mode("") is False       # Enter -> logged out
+    assert cli.parse_run_mode("logged out") is False
+    assert cli.parse_run_mode("x") is None       # unrecognized
+    assert cli.login_creds_configured({"login_username": "", "login_password": ""}) is False
+    assert cli.login_creds_configured({"login_username": "b", "login_password": "p"}) is True
+
+
+def test_ask_run_mode_io():
+    """ask_run_mode reads the choice and aborts cleanly on EOF."""
+    import contextlib
+    import io
+
+    from instacloak import cli
+
+    class NonTty(io.StringIO):
+        def isatty(self):
+            return False
+
+    cfg = {"login_username": "burner_1", "login_password": "pw"}
+    old_stdin = sys.stdin
+    try:
+        sys.stdin = NonTty("2\n")
+        assert cli.ask_run_mode(cfg) is True
+        sys.stdin = NonTty("\n")
+        assert cli.ask_run_mode(cfg) is False        # Enter defaults logged out
+        sys.stdin = NonTty("")
+        assert cli.ask_run_mode(cfg) is None         # EOF aborts
+        sys.stdin = NonTty("zzz\nzzz\n")
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert cli.ask_run_mode(cfg) is False    # garbage twice -> default
+    finally:
+        sys.stdin = old_stdin
+
+
+def test_mode_flag_parses():
+    """--mode login|logout is honored; other values are rejected."""
+    from instacloak import cli
+    old_argv = sys.argv
+    try:
+        sys.argv = ["instacloak", "-u", "natgeo", "--mode", "login"]
+        assert cli.cli_args().mode == "login"
+        sys.argv = ["instacloak", "--mode", "logout"]
+        assert cli.cli_args().mode == "logout"
+        sys.argv = ["instacloak", "-u", "natgeo"]
+        assert cli.cli_args().mode is None
+    finally:
+        sys.argv = old_argv
+
+
+def test_mode_asked_before_target():
+    """With creds configured, the mode question precedes the target prompt."""
+    import argparse
+    import contextlib
+    import io
+
+    from instacloak import cli
+
+    class NonTty(io.StringIO):
+        def isatty(self):
+            return False
+
+    cfg = {"login_username": "burner_1", "login_password": "pw"}
+    old_stdin = sys.stdin
+    buf = io.StringIO()
+    try:
+        sys.stdin = NonTty("2\nnatgeo\nn\n")   # mode=login, target, decline proceed
+        args = argparse.Namespace(username=None, yes=False, mode=None)
+        with contextlib.redirect_stdout(buf):
+            cli.run_osint(cfg, args)
+    finally:
+        sys.stdin = old_stdin
+    out = buf.getvalue()
+    assert out.index("mode [1/2]") < out.index("target username")
+    assert out.index("target username") < out.index("Proceed?")
+    assert "mode: logged in as @burner_1" in out
+
+
 def test_non_tty_without_username_aborts_with_hint():
     """A piped/CI run with no -u must exit gracefully with a usage hint,
     never spin the menu or EOF-traceback."""
@@ -499,7 +583,7 @@ def test_run_osint_eof_at_username_prompt():
     buf = io.StringIO()
     try:
         sys.stdin = NonTty("")
-        args = argparse.Namespace(username=None, yes=False)
+        args = argparse.Namespace(username=None, yes=False, mode=None)
         with contextlib.redirect_stdout(buf):
             cli.run_osint({}, args)               # must not raise EOFError
     finally:

@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-from .ui import c, say
+from .ui import say, say_parts
 
 try:
     from cloakbrowser import launch_persistent_context
@@ -50,9 +50,9 @@ def open_session(cfg: dict, username: str):
     if cfg.get("human_preset"):
         kwargs["human_preset"] = cfg["human_preset"]
 
-    say(f"  profile: {c(profile_dir, 'dim')}")
+    say_parts("  profile: ", (profile_dir, "dim"))
     if cfg["proxy_enabled"]:
-        say(f"  proxy:   {c(cfg['proxy_url'].split('@')[-1], 'dim')}")
+        say_parts("  proxy:   ", (cfg["proxy_url"].split("@")[-1], "dim"))
     say("  launching stealth Chromium...", "dim")
     try:
         return launch_persistent_context(profile_dir, **kwargs)

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from . import __version__
 from .contacts import HASHTAG_RE, MENTION_RE, collect_contacts, count_matches
-from .ui import c, say
+from .ui import c, say, say_parts
 
 
 def _tri(v) -> str:
@@ -340,7 +340,7 @@ def print_summary(report: dict) -> None:
     p = report.get("profile") or {}
     counts = p.get("counts") or {}
     say("\n" + "=" * 60, "cyan")
-    say(f"  {c('REPORT', 'bold')}: {report['target']}  ({report['profile_status']})")
+    say_parts("  ", ("REPORT", "bold"), f": {report['target']}  ({report['profile_status']})")
     say("=" * 60, "cyan")
     if report["profile_status"] == "ok":
         say(f"  name        : {p.get('full_name')}")

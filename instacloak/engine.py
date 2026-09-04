@@ -23,7 +23,7 @@ from .report import build_report, write_report
 from .session import open_session, safe_dir_name
 from .social import attempt_relationship_list
 from .stories import collect_stories
-from .ui import c, say, section
+from .ui import c, say, say_parts, section
 
 
 def output_dir(cfg: dict, username: str) -> Path:
@@ -78,7 +78,7 @@ def collect(cfg: dict, username: str) -> dict:
             report = build_report(cfg, username, None, reason, [], ([], True),
                                   ([], True), [], notes, started)
             report_path = write_report(report, out_dir)
-            say(f"  saved: {c(str(report_path), 'green')}")
+            say_parts("  saved: ", (str(report_path), "green"))
             return report
 
         profile = norm_profile(profile_raw)
@@ -163,7 +163,7 @@ def collect(cfg: dict, username: str) -> dict:
         raw_path.write_text(json.dumps(profile_raw, indent=2, ensure_ascii=False),
                             encoding="utf-8")
         report_path = write_report(report, out_dir)
-        say(f"  saved: {c(str(report_path), 'green')}")
+        say_parts("  saved: ", (str(report_path), "green"))
         return report
     finally:
         try:

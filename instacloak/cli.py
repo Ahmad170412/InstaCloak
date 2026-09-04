@@ -17,14 +17,10 @@ from .config import load_config, save_login_config
 from .engine import collect, output_dir
 from .report import print_summary, write_markdown
 from .session import open_session
-from .ui import ANSI, NOTES, c, say, say_banner
+from .ui import NOTES, c, say, say_banner, say_parts
 
-MENU = """\
-  {yellow}1{reset}  {yellow}OSINT{reset}
-  {yellow}2{reset}  {yellow}Login (burner){reset}
-  {yellow}3{reset}  {yellow}Footprint{reset}
-  {yellow}4{reset}  {yellow}Exit{reset}
-"""
+MENU_ITEMS = [("1", "OSINT"), ("2", "Login (burner)"),
+              ("3", "Footprint"), ("4", "Exit")]
 
 
 def cli_args() -> argparse.Namespace:
@@ -40,21 +36,19 @@ def cli_args() -> argparse.Namespace:
     p.add_argument("--no-followers", action="store_true", help="skip follower/following attempt")
     p.add_argument("--deep", action="store_true",
                    help="extra logged-out data: HD profile pic + highlight story covers")
+    p.add_argument("--mode", choices=("login", "logout"), default=None,
+                   help="session mode for this run: 'login' uses the burner, "
+                        "'logout' forces logged-out (default: config)")
     p.add_argument("--version", action="version", version=f"InstaCloak {__version__}")
     return p.parse_args()
 
 
 def show_menu() -> str:
     """Display the main menu and return the user's choice."""
-    if sys.stdout.isatty():
-        yellow_code = f"\x1b[{ANSI['yellow']}m"
-        reset = "\x1b[0m"
-    else:
-        yellow_code = reset = ""
-
     say_banner()
     say(f"\n  InstaCloak v{__version__}", "gold")
-    say(MENU.format(yellow=yellow_code, reset=reset))
+    for num, label in MENU_ITEMS:
+        say_parts("  ", (num, "yellow"), "  ", (label, "yellow"))
 
     try:
         choice = input(c("  > ", "bold")).strip()
@@ -63,8 +57,67 @@ def show_menu() -> str:
     return choice
 
 
+def login_creds_configured(cfg: dict) -> bool:
+    """Burner credentials exist (username + password) in config/env."""
+    return bool(cfg.get("login_username")) and bool(cfg.get("login_password"))
+
+
+def parse_run_mode(ans: str) -> bool | None:
+    """Map the mode answer to a login decision.
+
+    False -> logged out, True -> logged in (burner); None -> unrecognized.
+    Empty/Enter defaults to logged out (stealth-first).
+    """
+    a = ans.strip().lower()
+    if a in ("", "1", "logout", "logged out", "logged-out", "logged_out"):
+        return False
+    if a in ("2", "login", "logged in", "logged-in", "burner"):
+        return True
+    return None
+
+
+def ask_run_mode(cfg: dict) -> bool | None:
+    """Ask logged-out vs logged-in (only called when creds are configured).
+
+    Returns True (login) / False (logged out) / None (aborted at EOF).
+    Unrecognized answers are retried once, then default to logged out.
+    """
+    say_parts("  Burner login available: @", (str(cfg.get("login_username")), "yellow"), "")
+    for _ in range(2):
+        say("    (1) logged out (default)    (2) logged in (burner)")
+        try:
+            ans = input(c("  mode [1/2]: ", "bold"))
+        except (EOFError, KeyboardInterrupt):
+            return None
+        mode = parse_run_mode(ans)
+        if mode is not None:
+            return mode
+        say("  (answer 1 or 2)", "yellow")
+    say("  defaulting to logged out.", "yellow")
+    return False
+
+
 def run_osint(cfg: dict, args) -> None:
-    """Run the OSINT collection flow."""
+    """Run the OSINT collection flow: mode first, then target, then confirm."""
+    # 1) session mode — asked before anything else, and only when burner creds
+    #    exist AND we're interactive AND no explicit --mode was given.
+    #    Scripted runs (-y) and --mode keep the config/flag as-is.
+    effective_cfg = cfg
+    if args.mode is None and not args.yes and login_creds_configured(cfg):
+        use_login = ask_run_mode(cfg)
+        if use_login is None:
+            say("\n  aborted.", "yellow")
+            return
+        effective_cfg = dict(cfg)
+        effective_cfg["login_enabled"] = use_login
+        if use_login:
+            say_parts("  mode: logged in as @",
+                      (str(cfg.get("login_username")), "magenta"), "")
+        else:
+            say("  mode: logged out", "dim")
+        say("")
+
+    # 2) target
     username = args.username
     if not username:
         try:
@@ -78,6 +131,8 @@ def run_osint(cfg: dict, args) -> None:
 
     say(f"\n  Target: @{username}\n", "bold")
     say(NOTES)
+
+    # 3) final confirmation
     if not args.yes:
         try:
             ok = input(c("\n  Proceed? [y/N] ", "bold")).strip().lower()
@@ -89,9 +144,9 @@ def run_osint(cfg: dict, args) -> None:
             return
 
     try:
-        report = collect(cfg, username)
+        report = collect(effective_cfg, username)
         print_summary(report)
-        _offer_markdown_export(cfg, report, args)
+        _offer_markdown_export(effective_cfg, report, args)
     except KeyboardInterrupt:
         say("\n  interrupted by user.", "yellow")
     except Exception as exc:  # noqa: BLE001
@@ -121,7 +176,7 @@ def _offer_markdown_export(cfg: dict, report: dict, args) -> None:
     if save_md:
         try:
             md_path = write_markdown(report, output_dir(cfg, report["target"]))
-            say(f"  markdown: {c(str(md_path), 'green')}")
+            say_parts("  markdown: ", (str(md_path), "green"))
         except Exception as exc:  # noqa: BLE001 - export must never crash the run
             say(f"  could not write markdown report: {exc}", "yellow")
 
@@ -147,7 +202,7 @@ def run_login(cfg: dict, args) -> None:
         say("  empty values -- aborting.", "yellow")
         return
     path = save_login_config(args.config or "config.toml", user, pw, enabled=True)
-    say(f"  saved to {c(path, 'green')}")
+    say_parts("  saved to ", (path, "green"))
     cfg["login_enabled"], cfg["login_username"], cfg["login_password"] = True, user, pw
     try:
         test = input(c("  Test the login now (opens a visible browser)? [y/N] ", "bold")).strip().lower()
@@ -195,6 +250,13 @@ def main() -> None:
         cfg["attempt_followers"] = False
     if args.deep:
         cfg["deep"] = True
+    if args.mode == "login":
+        if not (cfg.get("login_username") and cfg.get("login_password")):
+            say("  --mode login given but no burner credentials configured "
+                "(menu 2 / INSTACLOAK_LOGIN_* / config [login]).", "yellow")
+        cfg["login_enabled"] = True
+    elif args.mode == "logout":
+        cfg["login_enabled"] = False
 
     # Direct mode: if -u is passed, skip menu and run OSINT directly
     if args.username:
