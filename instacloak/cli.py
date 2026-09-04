@@ -225,8 +225,9 @@ def run_login(cfg: dict, args) -> None:
 
 
 def run_footprint() -> None:
-    """Placeholder for footprint / auto-scroll mode."""
-    say("\n  [coming soon] Footprint mode — self-driven Reels-scroll auto-footprint\n", "yellow")
+    """Placeholder for footprint / auto-scroll mode (V1.1)."""
+    say_parts("\n  Footprint mode — ", ("V1.1 feature, coming soon!", "gold", "bold"),
+              "\n  Self-driven Reels-scroll auto-footprint is next on the roadmap.\n")
 
 
 def main() -> None:

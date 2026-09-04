@@ -56,7 +56,7 @@ nothing, or getting lied to.** InstaCloak is the tool that refuses all three:
 
 Everything Instagram shows the public, pulled clean and organized:
 
-| Data | V1 (logged-out) | V2 (burner login, menu 2) |
+| Data | V1 (logged-out) | V1 (burner login, menu 2) |
 |---|---|---|
 | Profile: bio, name, verification, counts, propic URL | Yes | — |
 | Extra metadata: pronouns, badges, highlights, last-reel date, memorialized… | Yes | — |
@@ -234,18 +234,26 @@ with `-y` (cron/CI) auto-save it; plain piped runs keep the default (no).
 | Launch error about license/binary | `cloakbrowser login`, or set `CLOAKBROWSER_LICENSE_KEY`; check the ~200MB binary can download. |
 | Empty posts after a site change | Run `tests/test_instacloak.py`; if fixtures fail, Instagram changed its JSON again — update the parsers in `instacloak/profile.py` / `post.py`. |
 
-## Roadmap (V2)
+## Roadmap
+
+**Shipped in V1 (1.0.0):**
 
 - [x] **Burner-account login** — menu 2 saves credentials to `config.toml`;
       logged-in runs share one persistent burner profile and unlock full
       follower/following lists + best-effort stories. Challenges pause and wait
       for you to solve them in the visible window.
+- [x] Refactor into a package: `instacloak/` library (`python3 -m instacloak`) + installable `instacloak` CLI (`pip install -e .`).
+
+**Next up — V1.1:**
+
+- [ ] **Auto-footprint mode** (menu 3) — the browser scrolls Reels / related
+      profiles by itself between runs to grow a believable browsing history
+      before a target engagement.
+
+**Later — V1.2+:**
+
 - [ ] **Follower contact mining** — walk follower usernames → bios/captions to
       surface emails/phones (Osintgram parity).
-- [ ] **Auto-footprint mode** — the browser scrolls Reels / related profiles by
-      itself between runs to grow a believable browsing history before a target
-      engagement.
-- [x] Refactor into a package: `instacloak/` library (`python3 -m instacloak`) + installable `instacloak` CLI (`pip install -e .`).
 
 ## Legal / ethics
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "instacloak"
-version = "0.1.0"
+version = "1.0.0"
 description = "Stealth Instagram OSINT through a humanized, visible browser"
 readme = "README.md"
 requires-python = ">=3.11"
