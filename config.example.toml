@@ -1,0 +1,45 @@
+# InstaCloak configuration — copy this file to `config.toml` and adjust.
+# Environment overrides: INSTACLOAK_PROXY, INSTACLOAK_OUTPUT_DIR,
+# INSTACLOAK_PROFILES_DIR, INSTACLOAK_HEADLESS=1, CLOAKBROWSER_LICENSE_KEY
+
+[instacloak]
+# Where reports and media land
+output_dir = "output"
+# Where persistent browser profiles live (footprint builds across runs)
+profiles_dir = "profiles"
+
+# Show the browser window so you can watch it work
+headless = false
+
+# Match timezone/locale to the proxy exit IP (needs `pip install 'cloakbrowser[geoip]'`)
+geoip = true
+
+# human_preset: "default" or "careful" (slower, more deliberate movements)
+human_preset = "default"
+
+# Jittered human delays between actions (seconds)
+min_delay = 1.2
+max_delay = 3.5
+
+# Extraction limits
+max_posts = 12        # recent posts to deep-visit (logged-out shows ~12)
+max_followers = 200   # cap on usernames collected from the followers modal
+max_following = 200
+download_media = true
+download_videos = false
+attempt_followers = true
+deep = false               # extra logged-out data: HD propic + highlight covers
+
+[login]
+# Optional burner account: unlocks full follower/following lists + stories.
+# NEVER use your primary account. Set via the Login menu option, or:
+#   INSTACLOAK_LOGIN=1 INSTACLOAK_LOGIN_USERNAME=... INSTACLOAK_LOGIN_PASSWORD=...
+enabled = false
+username = ""
+password = ""
+
+[proxy]
+# Bring your own residential proxy — sticky session recommended.
+# Datacenter IPs are blocked instantly by Instagram.
+enabled = false
+url = "http://user:pass@host:port"

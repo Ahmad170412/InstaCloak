@@ -1,0 +1,21 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+
+# Secrets / local state — never commit
+config.toml
+
+# Client tool state
+.freebuff/
+
+# Run artifacts
+output/
+profiles/
+*.log
+.DS_Store
