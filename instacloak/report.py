@@ -30,7 +30,8 @@ def _contact_channels(p: dict) -> str:
 def build_report(cfg: dict, username: str, profile: dict | None, reason: str,
                  posts: list[dict], followers: tuple[list, bool],
                  following: tuple[list, bool], media_files: list[str],
-                 notes: list[str], started: float) -> dict:
+                 notes: list[str], started: float, lists_skipped: bool = False,
+                 stories: dict | None = None) -> dict:
     all_texts = [profile.get("biography") or ""] if profile else []
     all_texts += [p.get("caption") or "" for p in posts]
 
@@ -84,16 +85,19 @@ def build_report(cfg: dict, username: str, profile: dict | None, reason: str,
             "count": (profile or {}).get("counts", {}).get("followers"),
             "collected": len(f_list),
             "walled": f_walled,
+            "skipped": lists_skipped,
             "usernames": f_list,
         },
         "following": {
             "count": (profile or {}).get("counts", {}).get("following"),
             "collected": len(g_list),
             "walled": g_walled,
+            "skipped": lists_skipped,
             "usernames": g_list,
         },
         "media_downloaded": media_files,
         "notes": notes,
+        "stories": stories,
     }
 
 
@@ -266,7 +270,9 @@ def _posts_md(report: dict) -> list[str]:
 
 
 def _wall_label(report: dict, g: dict) -> str:
-    """Suffix explaining an empty list: private account vs login wall."""
+    """Suffix explaining an empty list: skipped vs private vs login wall."""
+    if g.get("skipped"):
+        return " (not attempted -- --no-followers)"
     if not g.get("walled"):
         return ""
     if (report.get("profile") or {}).get("is_private"):

@@ -161,7 +161,8 @@ def collect(cfg: dict, username: str) -> dict:
                             h["cover_file"] = fn
                             media_files.append(fn)
 
-        if cfg["attempt_followers"]:
+        skipped = not cfg["attempt_followers"]
+        if not skipped:
             section(4, 5, "checking social graph (followers / following)")
             f_list, f_walled = attempt_relationship_list(page, cfg, username, "followers")
             g_list, g_walled = attempt_relationship_list(page, cfg, username, "following")
@@ -175,13 +176,19 @@ def collect(cfg: dict, username: str) -> dict:
                     say(f"  {kind}: collected {len(lst)}")
                 human_delay(cfg, 1.5, 3.0)
         else:
-            f_list, g_list, f_walled, g_walled = [], [], True, True
+            # Skipped, not walled: we never tried, so `walled` must stay False.
+            # Claiming a wall we did not hit is exactly the kind of invented
+            # data this tool promises never to produce.
+            f_list, g_list, f_walled, g_walled = [], [], False, False
+            notes.append("followers/following lists not attempted "
+                         "(--no-followers) -- 'walled' is false, not walled")
+            say("  social graph skipped (--no-followers)", "yellow")
 
         section(5, 5, "writing report")
         report = build_report(cfg, username, profile, "ok", posts,
                               (f_list, f_walled), (g_list, g_walled),
-                              media_files, notes, started)
-        report["stories"] = stories
+                              media_files, notes, started,
+                              lists_skipped=skipped, stories=stories)
         raw_path = out_dir / "raw_profile.json"
         raw_path.write_text(json.dumps(profile_raw, indent=2, ensure_ascii=False),
                             encoding="utf-8")
