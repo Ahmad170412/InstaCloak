@@ -222,7 +222,7 @@ with `-y` (cron/CI) auto-save it; plain piped runs keep the default (no).
   shapes. Run the offline suite after Instagram updates break something:
 
 ```bash
-./venv/bin/python tests/test_instacloak.py   # 24 tests, no network needed
+./venv/bin/python tests/test_instacloak.py   # 29 tests, no network needed
 ```
 
 ## Troubleshooting
